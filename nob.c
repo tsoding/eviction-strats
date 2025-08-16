@@ -10,7 +10,7 @@
 // average duration.
 #define SAMPLES_COUNT 10
 // How many jobs a single build should create. Set it to something like twice
-// the amount of course you have for a good measure, I dunno.
+// the amount of cores you have for a good measure, I dunno.
 #define WORKERS_COUNT 32
 
 typedef struct {

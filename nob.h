@@ -131,6 +131,7 @@
 #    include <sys/stat.h>
 #    include <unistd.h>
 #    include <fcntl.h>
+#    include <sched.h>
 #endif
 
 #ifdef _WIN32
@@ -379,17 +380,23 @@ typedef enum {
     EVICT_WAIT_FOR_RAND,
     EVICT_WAIT_FOR_ANY_GROUP,
     EVICT_WAIT_FOR_ANY_CHILD,
+    EVICT_WAIT_FOR_ANY_BUSY,
+    EVICT_WAIT_FOR_ANY_BUSY_SLEEP,
+    EVICT_WAIT_FOR_ANY_BUSY_YIELD,
     COUNT_STARTS,
 } Nob_Async_Eviction_Strat;
 
 const char *nob_eviction_strat_name(Nob_Async_Eviction_Strat strat)
 {
     switch(strat) {
-    case EVICT_WAIT_FOR_ALL:         return "wait-for-all";
-    case EVICT_WAIT_FOR_LAST:        return "wait-for-last";
-    case EVICT_WAIT_FOR_RAND:        return "wait-for-rand";
-    case EVICT_WAIT_FOR_ANY_GROUP:   return "wait-for-any-group";
-    case EVICT_WAIT_FOR_ANY_CHILD:   return "wait-for-any-child";
+    case EVICT_WAIT_FOR_ALL:               return "wait-for-all";
+    case EVICT_WAIT_FOR_LAST:              return "wait-for-last";
+    case EVICT_WAIT_FOR_RAND:              return "wait-for-rand";
+    case EVICT_WAIT_FOR_ANY_GROUP:         return "wait-for-any-group";
+    case EVICT_WAIT_FOR_ANY_CHILD:         return "wait-for-any-child";
+    case EVICT_WAIT_FOR_ANY_BUSY:          return "wait-for-any-busy";
+    case EVICT_WAIT_FOR_ANY_BUSY_SLEEP:    return "wait-for-any-busy-sleep";
+    case EVICT_WAIT_FOR_ANY_BUSY_YIELD:    return "wait-for-any-busy-yield";
     case COUNT_STARTS:
     default: NOB_UNREACHABLE("strat");
     }
@@ -1086,6 +1093,59 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
                         }
                     }
                     assert(found);
+                }
+            }
+#endif // _WIN32
+        } break;
+        case EVICT_WAIT_FOR_ANY_BUSY: {
+#ifdef _WIN32
+#error "Windows is not supported yet"
+#else
+            while (opt.async->count >= opt.max_procs) {
+                for (size_t i = 0; i < opt.async->count; ++i) {
+                    pid_t pid = waitpid(opt.async->items[i], NULL, WNOHANG);
+                    assert(pid >= 0);
+                    if (pid > 0) {
+                        assert(pid == opt.async->items[i]);
+                        nob_da_remove_unordered(opt.async, i);
+                        break;
+                    }
+                }
+            }
+#endif // _WIN32
+        } break;
+        case EVICT_WAIT_FOR_ANY_BUSY_SLEEP: {
+#ifdef _WIN32
+#error "Windows is not supported yet"
+#else
+            while (opt.async->count >= opt.max_procs) {
+                for (size_t i = 0; i < opt.async->count; ++i) {
+                    pid_t pid = waitpid(opt.async->items[i], NULL, WNOHANG);
+                    assert(pid >= 0);
+                    if (pid > 0) {
+                        assert(pid == opt.async->items[i]);
+                        nob_da_remove_unordered(opt.async, i);
+                        break;
+                    }
+                    usleep(1000);
+                }
+            }
+#endif // _WIN32
+        } break;
+        case EVICT_WAIT_FOR_ANY_BUSY_YIELD: {
+#ifdef _WIN32
+#error "Windows is not supported yet"
+#else
+            while (opt.async->count >= opt.max_procs) {
+                for (size_t i = 0; i < opt.async->count; ++i) {
+                    pid_t pid = waitpid(opt.async->items[i], NULL, WNOHANG);
+                    assert(pid >= 0);
+                    if (pid > 0) {
+                        assert(pid == opt.async->items[i]);
+                        nob_da_remove_unordered(opt.async, i);
+                        break;
+                    }
+                    sched_yield();
                 }
             }
 #endif // _WIN32

@@ -378,6 +378,7 @@ typedef enum {
     EVICT_WAIT_FOR_LAST,
     EVICT_WAIT_FOR_RAND,
     EVICT_WAIT_FOR_ANY_GROUP,
+    EVICT_WAIT_FOR_ANY_CHILD,
     COUNT_STARTS,
 } Nob_Async_Eviction_Strat;
 
@@ -388,6 +389,7 @@ const char *nob_eviction_strat_name(Nob_Async_Eviction_Strat strat)
     case EVICT_WAIT_FOR_LAST:        return "wait-for-last";
     case EVICT_WAIT_FOR_RAND:        return "wait-for-rand";
     case EVICT_WAIT_FOR_ANY_GROUP:   return "wait-for-any-group";
+    case EVICT_WAIT_FOR_ANY_CHILD:   return "wait-for-any-child";
     case COUNT_STARTS:
     default: NOB_UNREACHABLE("strat");
     }
@@ -1031,6 +1033,27 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
                 nob_da_remove_unordered(opt.async, index);
             }
         } break;
+        case EVICT_WAIT_FOR_ANY_CHILD: {
+#ifdef _WIN32
+#error "Windows is not supported yet"
+#else
+            while (opt.async->count >= opt.max_procs) {
+                pid_t pid = waitpid(-1, NULL, 0);
+                if (pid < 0) {
+                    nob_log(NOB_ERROR, "could not wait on all children: %s", strerror(errno));
+                    return false;
+                }
+                bool found = false;
+                for (size_t i = 0; !found && i < opt.async->count; ++i) {
+                    if (opt.async->items[i] == pid) {
+                        nob_da_remove_unordered(opt.async, i);
+                        found = true;
+                    }
+                }
+                assert(found);
+            }
+#endif // _WIN32
+        } break;
         case EVICT_WAIT_FOR_ANY_GROUP: {
 #ifdef _WIN32
 #error "Windows is not supported yet"
@@ -1072,14 +1095,17 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
         }
     }
 
-    pid_t pgid = 0;
-#ifndef _WIN32
-    if (opt.async && opt.evict == EVICT_WAIT_FOR_ANY_GROUP && opt.async->count > 0) {
-        pgid = getpgid(opt.async->items[0]);
-        assert(pgid != -1);
+    Nob_Proc proc;
+    if (opt.async && opt.evict == EVICT_WAIT_FOR_ANY_GROUP) {
+        pid_t pgid = 0;
+        if (opt.async->count > 0) {
+            pgid = getpgid(opt.async->items[0]);
+            assert(pgid != -1);
+        }
+        proc = nob_cmd_start_process_in_group(*cmd, opt.fdin, opt.fdout, opt.fderr, pgid);
+    } else {
+        proc = nob_cmd_start_process(*cmd, opt.fdin, opt.fdout, opt.fderr);
     }
-#endif
-    Nob_Proc proc = nob_cmd_start_process_in_group(*cmd, opt.fdin, opt.fdout, opt.fderr, pgid);
 
     if (!opt.no_reset) {
         cmd->count = 0;

@@ -108,8 +108,10 @@ int main(int argc, char **argv)
     };
     size_t start_max_procs = 1;
 
-    for (size_t i = 0; i < ARRAY_LEN(workers); ++i) {
-        for (size_t strategy = 0; strategy < COUNT_STARTS; ++strategy) {
+//    for (size_t i = 0; i < ARRAY_LEN(workers); ++i) {
+    size_t i = 1;
+        size_t strategy = EVICT_WAIT_FOR_ANY;
+        //for (size_t strategy = 0; strategy < COUNT_STARTS; ++strategy) {
             size_t mark = temp_save();
             avgs.count = 0;
 
@@ -152,8 +154,8 @@ int main(int argc, char **argv)
             nob_log(INFO, "Generated %s", result_path);
 
             temp_rewind(mark);
-        }
-    }
+        //}
+    //}
 
     return 0;
 }

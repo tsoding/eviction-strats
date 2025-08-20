@@ -1161,7 +1161,7 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
                 for (size_t i = 0; i < opt.async->count; ++i) {
                     int pidfd = syscall(SYS_pidfd_open, opt.async->items[i], 0);
                     if (pidfd < 0) {
-                        nob_log(NOB_ERROR, "pidfd_open");
+                        nob_log(NOB_ERROR, "pidfd_open %d\n", pidfd);
                         return false;
                     }
                     pfds[i].fd = pidfd;
@@ -1186,6 +1186,9 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
                             pfds[i].fd = -1;
                         }
                     }
+                }
+                for (size_t i = 0; i < opt.async->count; ++i) {
+                    close(pfds[i].fd);
                 }
                 free(pfds);
             }

@@ -126,6 +126,8 @@
 #    include <direct.h>
 #    include <shellapi.h>
 #else
+#    include <sys/poll.h>
+#    include <sys/syscall.h>
 #    include <sys/types.h>
 #    include <sys/wait.h>
 #    include <sys/stat.h>
@@ -383,6 +385,7 @@ typedef enum {
     EVICT_WAIT_FOR_ANY_BUSY,
     EVICT_WAIT_FOR_ANY_BUSY_SLEEP,
     EVICT_WAIT_FOR_ANY_BUSY_YIELD,
+    EVICT_WAIT_FOR_ANY_PIDFD,
     COUNT_STARTS,
 } Nob_Async_Eviction_Strat;
 
@@ -397,6 +400,7 @@ const char *nob_eviction_strat_name(Nob_Async_Eviction_Strat strat)
     case EVICT_WAIT_FOR_ANY_BUSY:          return "wait-for-any-busy";
     case EVICT_WAIT_FOR_ANY_BUSY_SLEEP:    return "wait-for-any-busy-sleep";
     case EVICT_WAIT_FOR_ANY_BUSY_YIELD:    return "wait-for-any-busy-yield";
+    case EVICT_WAIT_FOR_ANY_PIDFD:    return "wait-for-any-pidfd";
     case COUNT_STARTS:
     default: NOB_UNREACHABLE("strat");
     }
@@ -1149,6 +1153,42 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
                 }
             }
 #endif // _WIN32
+        } break;
+        case EVICT_WAIT_FOR_ANY_PIDFD: {
+            if (opt.async->count >= 0) {
+                // TODO store pidfds in Nob_Proc array
+                struct pollfd* pfds = calloc(opt.async->count, sizeof(pfds[0]));
+                for (size_t i = 0; i < opt.async->count; ++i) {
+                    int pidfd = syscall(SYS_pidfd_open, opt.async->items[i], 0);
+                    if (pidfd < 0) {
+                        nob_log(NOB_ERROR, "pidfd_open");
+                        return false;
+                    }
+                    pfds[i].fd = pidfd;
+                    pfds[i].events = POLLIN;
+                }
+                while (opt.async->count >= opt.max_procs) {
+                    int ret = poll(pfds, opt.async->count, -1);
+                    if (ret < 0) {
+                        perror("poll");
+                        exit(1);
+                    }
+                    for (int i = 0; i < opt.async->count; i++) {
+                        if (pfds[i].fd != -1 && (pfds[i].revents & POLLIN)) {
+                            pid_t pid = waitpid(opt.async->items[i], NULL, 0);  // reap zombie
+                            assert(pid >= 0);
+                            if (pid > 0) {
+                                assert(pid == opt.async->items[i]);
+                                nob_da_remove_unordered(opt.async, i);
+                                break;
+                            }
+                            close(pfds[i].fd);
+                            pfds[i].fd = -1;
+                        }
+                    }
+                }
+                free(pfds);
+            }
         } break;
         case COUNT_STARTS:
         default: NOB_UNREACHABLE("opt.evict");

@@ -377,6 +377,7 @@ typedef struct {
 typedef enum {
     EVICT_WAIT_FOR_ALL,
     EVICT_WAIT_FOR_LAST,
+    EVICT_WAIT_FOR_FIRST,
     EVICT_WAIT_FOR_RAND,
     EVICT_WAIT_FOR_ANY_GROUP,
     EVICT_WAIT_FOR_ANY_CHILD,
@@ -391,6 +392,7 @@ const char *nob_eviction_strat_name(Nob_Async_Eviction_Strat strat)
     switch(strat) {
     case EVICT_WAIT_FOR_ALL:               return "wait-for-all";
     case EVICT_WAIT_FOR_LAST:              return "wait-for-last";
+    case EVICT_WAIT_FOR_FIRST:              return "wait-for-first";
     case EVICT_WAIT_FOR_RAND:              return "wait-for-rand";
     case EVICT_WAIT_FOR_ANY_GROUP:         return "wait-for-any-group";
     case EVICT_WAIT_FOR_ANY_CHILD:         return "wait-for-any-child";
@@ -400,6 +402,7 @@ const char *nob_eviction_strat_name(Nob_Async_Eviction_Strat strat)
     case COUNT_STARTS:
     default: NOB_UNREACHABLE("strat");
     }
+    static_assert(COUNT_STARTS == 9, "Number of strategies has changed, update switch statement");
 };
 
 typedef struct {
@@ -1031,6 +1034,13 @@ NOBDEF bool nob_cmd_run_opt(Nob_Cmd *cmd, Nob_Cmd_Opt opt)
             while (opt.async->count >= opt.max_procs) {
                 if (!nob_proc_wait(nob_da_last(opt.async))) return false;
                 opt.async->count -= 1;
+            }
+        } break;
+        case EVICT_WAIT_FOR_FIRST: {
+            while (opt.async->count >= opt.max_procs) {
+                if (!nob_proc_wait(opt.async->items[0])) return false;
+                opt.async->count -= 1;
+                memmove(&opt.async->items[0], &opt.async->items[1], opt.async->count*sizeof(opt.async->items[0]));
             }
         } break;
         case EVICT_WAIT_FOR_RAND: {

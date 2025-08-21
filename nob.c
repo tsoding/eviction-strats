@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #define NOB_STRIP_PREFIX
 #define NOB_EXPERIMENTAL_DELETE_OLD
-#include "nob.h"
+#include "nob_modified.h"
 
 #define BUILD_FOLDER "./build/"
 #define RESULTS_FOLDER "./results/"

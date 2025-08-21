@@ -1,3 +1,7 @@
+// WARNING! This is a modified version of https://github.com/tsoding/nob.h/pull/84
+// specifically tweaked to test different process eviction strategies. None of these
+// change ever going to be part of the official nob.h release.
+
 /* nob - v1.23.0 - Public Domain - https://github.com/tsoding/nob.h
 
    This library is the next generation of the [NoBuild](https://github.com/tsoding/nobuild) idea.
